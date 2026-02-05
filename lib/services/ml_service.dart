@@ -12,6 +12,7 @@ class MLService {
   // Model configuration
   static const int inputSize = 224;
   static const int numClasses = 5;
+  static const int batchSize = 1;
   
   // Sample disease database with explanations
   static const Map<String, Map<String, dynamic>> diseaseInfo = {
@@ -107,7 +108,7 @@ class MLService {
     );
 
     // Convert to Float32 array and normalize
-    final inputBuffer = Float32List(1 * inputSize * inputSize * 3);
+    final inputBuffer = Float32List(batchSize * inputSize * inputSize * 3);
     int pixelIndex = 0;
 
     for (var y = 0; y < inputSize; y++) {

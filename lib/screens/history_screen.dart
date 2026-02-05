@@ -97,6 +97,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     if (difference.inDays == 0) {
       if (difference.inHours == 0) {
+        if (difference.inMinutes == 0) {
+          return 'Just now';
+        }
         return '${difference.inMinutes} minutes ago';
       }
       return '${difference.inHours} hours ago';

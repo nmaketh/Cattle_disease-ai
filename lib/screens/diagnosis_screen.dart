@@ -34,10 +34,10 @@ class _DiagnosisScreenState extends State<DiagnosisScreen> {
     await _mlService.loadModel();
   }
 
-  Future<void> _captureImage(ImageSource source) async {
+  Future<void> _captureImage(CaptureSource source) async {
     String? imagePath;
     
-    if (source == ImageSource.camera) {
+    if (source == CaptureSource.camera) {
       imagePath = await _imageService.captureFromCamera();
     } else {
       imagePath = await _imageService.pickFromGallery();
@@ -122,7 +122,7 @@ class _DiagnosisScreenState extends State<DiagnosisScreen> {
               title: const Text('Camera'),
               onTap: () {
                 Navigator.pop(context);
-                _captureImage(ImageSource.camera);
+                _captureImage(CaptureSource.camera);
               },
             ),
             ListTile(
@@ -130,7 +130,7 @@ class _DiagnosisScreenState extends State<DiagnosisScreen> {
               title: const Text('Gallery'),
               onTap: () {
                 Navigator.pop(context);
-                _captureImage(ImageSource.gallery);
+                _captureImage(CaptureSource.gallery);
               },
             ),
           ],
@@ -241,4 +241,4 @@ class _DiagnosisScreenState extends State<DiagnosisScreen> {
   }
 }
 
-enum ImageSource { camera, gallery }
+enum CaptureSource { camera, gallery }
