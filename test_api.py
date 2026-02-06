@@ -2,11 +2,20 @@
 Example client script to test the Cattle Disease AI API
 """
 
-import requests
+import base64
 import json
+from pathlib import Path
+
+import requests
 
 # API endpoint (change to your deployed URL)
 API_URL = "http://localhost:8000"
+SAMPLE_IMAGE_PATH = Path("designs") / "sample_image.png"
+
+
+def _load_sample_image_base64() -> str:
+    image_bytes = SAMPLE_IMAGE_PATH.read_bytes()
+    return base64.b64encode(image_bytes).decode("ascii")
 
 def test_health():
     """Test the health endpoint"""
@@ -33,9 +42,8 @@ def test_prediction():
     """Test the prediction endpoint"""
     print("Testing /predict endpoint...")
     
-    # Example features (adjust based on your model input)
     test_data = {
-        "features": [1.0, 2.0, 3.0, 4.0, 5.0]
+        "image_base64": _load_sample_image_base64()
     }
     
     response = requests.post(
@@ -47,14 +55,37 @@ def test_prediction():
     print(f"Status: {response.status_code}")
     print(f"Response: {json.dumps(response.json(), indent=2)}\n")
 
+
+def test_prediction_explain():
+    """Test prediction with explainability endpoint"""
+    print("Testing /predict-explain endpoint...")
+
+    test_data = {
+        "image_base64": _load_sample_image_base64()
+    }
+
+    response = requests.post(
+        f"{API_URL}/predict-explain",
+        json=test_data,
+        headers={"Content-Type": "application/json"}
+    )
+
+    payload = response.json()
+    if "explainability" in payload:
+        heatmap_len = len(payload["explainability"].get("heatmap_png_base64", ""))
+        payload["explainability"]["heatmap_png_base64"] = f"<base64 length={heatmap_len}>"
+
+    print(f"Status: {response.status_code}")
+    print(f"Response: {json.dumps(payload, indent=2)}\n")
+
 def test_batch_prediction():
     """Test multiple predictions"""
     print("Testing batch predictions...")
     
     test_cases = [
-        {"features": [0.5, 1.0, 1.5, 2.0, 2.5]},
-        {"features": [2.0, 2.0, 2.0, 2.0, 2.0]},
-        {"features": [5.0, 4.5, 4.0, 3.5, 3.0]},
+        {"image_base64": _load_sample_image_base64()},
+        {"image_base64": _load_sample_image_base64()},
+        {"image_base64": _load_sample_image_base64()},
     ]
     
     for i, test_data in enumerate(test_cases):
@@ -76,6 +107,7 @@ if __name__ == "__main__":
         test_health()
         test_model_info()
         test_prediction()
+        test_prediction_explain()
         test_batch_prediction()
         
         print("=" * 50)

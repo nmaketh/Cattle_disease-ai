@@ -82,7 +82,7 @@ Response:
 Request:
 ```json
 {
-  "features": [1.0, 2.0, 3.0, 4.0, 5.0]
+  "image_base64": "iVBORw0KGgoAAA..."
 }
 ```
 
@@ -106,6 +106,31 @@ Response:
   "input_dtype": "<dtype: 'float32'>",
   "output_shape": [1, 1],
   "output_dtype": "<dtype: 'float32'>"
+}
+```
+
+### 5. Prediction with Explainability
+**POST** `/predict-explain`
+
+Request:
+```json
+{
+  "image_base64": "iVBORw0KGgoAAA..."
+}
+```
+
+Response:
+```json
+{
+  "prediction": 0.73,
+  "confidence": 0.46,
+  "class_label": "Diseased",
+  "explainability": {
+    "heatmap_png_base64": "iVBORw0KGgoAAA...",
+    "method": "input-intensity",
+    "normalization": "abs-max",
+    "heatmap_shape": [128, 80]
+  }
 }
 ```
 
@@ -154,6 +179,7 @@ git push origin main
 The API reads the following environment variables:
 
 - `PORT` - Server port (default: 8000)
+- `KERAS_MODEL_PATH` - Path to the TF/Keras model used for Grad-CAM (default: ml/model/cattle_health_mvp.h5)
 
 ## Model Details
 
@@ -207,6 +233,47 @@ curl -X POST http://localhost:8000/predict \
 - ✅ Use Render's paid plans for better performance if needed
 - ✅ Consider using a database for logging predictions
 - ✅ Implement caching for repeated requests
+
+## Explainability and Caching
+
+The API uses the TF/Keras model for real Grad-CAM. If the Keras model is missing or Grad-CAM
+fails, it falls back to a normalized intensity heatmap.
+
+Environment variables:
+
+- `CACHE_MAX_ITEMS` - Max LRU cache entries per worker (default: 256)
+- `HEATMAP_HEIGHT` - Heatmap height before scaling (default: 32)
+- `HEATMAP_SCALE_X` - Horizontal scale factor (default: 16)
+- `HEATMAP_SCALE_Y` - Vertical scale factor (default: 4)
+- `KERAS_MODEL_PATH` - Path to the TF/Keras model used for Grad-CAM (default: ml/model/cattle_health_mvp.h5)
+
+## Load Balancing (Proxy-Level)
+
+For production, place the API behind a reverse proxy that balances traffic across multiple
+app instances. Below is a minimal Nginx example with round-robin load balancing:
+
+```nginx
+upstream cattle_api {
+  server 127.0.0.1:8000;
+  server 127.0.0.1:8001;
+  server 127.0.0.1:8002;
+}
+
+server {
+  listen 80;
+
+  location / {
+    proxy_pass http://cattle_api;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+```
+
+Run multiple API instances (for example with different ports or containers), and point the
+upstream to each instance. This complements the in-app LRU cache and improves throughput.
 
 ## License
 
