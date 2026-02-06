@@ -45,7 +45,7 @@ Hybrid online-offline explainable ML system for early detection of priority catt
 - Start command: `uvicorn app:app --host 0.0.0.0 --port $PORT`
 
 ## Video Demo
-- Demo video: TODO add link
+- Demo video: https://drive.google.com/file/d/18AnR8wdVJF7xwExxxQ7Aj9vrNKsbCpW1/view?usp=sharing
 
 ## Submission Checklist
 - README with description, setup, and deployment plan
