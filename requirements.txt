@@ -6,3 +6,4 @@ pydantic==2.6.3
 python-multipart==0.0.6
 requests==2.31.0
 pillow==10.4.0
+streamlit==1.37.1

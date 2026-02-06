@@ -104,11 +104,16 @@ EXPLAIN_CACHE = LRUCache(CACHE_MAX_ITEMS)
 class PredictionInput(BaseModel):
     """Input data for model prediction"""
     image_base64: str = Field(..., description="Base64-encoded PNG/JPEG image")
+    symptoms: Optional[List[float]] = Field(
+        default=None,
+        description="Optional symptom vector [fever, nodules, mouth_sores, nasal_discharge, cough, swollen_lymph]"
+    )
     
     class Config:
         json_schema_extra = {
             "example": {
-                "image_base64": "iVBORw0KGgoAAA..."
+                "image_base64": "iVBORw0KGgoAAA...",
+                "symptoms": [1, 0, 1, 0, 0, 0]
             }
         }
 
@@ -137,9 +142,67 @@ def _bytes_to_key(image_bytes: bytes) -> str:
     return hashlib.sha256(image_bytes).hexdigest()
 
 
-def _run_inference(features: np.ndarray) -> PredictionOutput:
+def _get_image_input_detail():
+    if not input_details:
+        return None
+    for detail in input_details:
+        if len(detail.get("shape", [])) == 4:
+            return detail
+    return input_details[0]
+
+
+def _get_symptom_input_detail():
+    if not input_details:
+        return None
+    for detail in input_details:
+        if len(detail.get("shape", [])) == 2:
+            return detail
+    return input_details[1] if len(input_details) > 1 else None
+
+
+def _get_symptom_length(default_len: int = 6) -> int:
+    try:
+        if keras_model is not None and len(keras_model.inputs) > 1:
+            return int(keras_model.inputs[1].shape[-1])
+    except Exception:
+        pass
+    detail = _get_symptom_input_detail()
+    if detail is not None:
+        try:
+            return int(detail.get("shape", [1, default_len])[-1])
+        except Exception:
+            return default_len
+    return default_len
+
+
+def _prepare_symptoms(symptoms: Optional[List[float]], expected_len: int) -> np.ndarray:
+    if symptoms is None:
+        values = np.zeros((expected_len,), dtype=np.float32)
+    else:
+        if len(symptoms) != expected_len:
+            raise ValueError(f"symptoms must have length {expected_len}")
+        values = np.asarray(symptoms, dtype=np.float32)
+    return values.reshape(1, expected_len)
+
+
+def _run_inference(features: np.ndarray, symptoms: Optional[List[float]] = None) -> PredictionOutput:
     with INFERENCE_LOCK:
-        interpreter.set_tensor(input_details[0]["index"], features)
+        if not input_details:
+            raise ValueError("Model input details unavailable")
+
+        if len(input_details) == 1:
+            interpreter.set_tensor(input_details[0]["index"], features)
+        else:
+            image_detail = _get_image_input_detail()
+            symptom_detail = _get_symptom_input_detail()
+            if image_detail is None:
+                image_detail = input_details[0]
+            interpreter.set_tensor(image_detail["index"], features)
+
+            if symptom_detail is not None:
+                expected_len = int(symptom_detail.get("shape", [1, 6])[-1])
+                symptom_array = _prepare_symptoms(symptoms, expected_len)
+                interpreter.set_tensor(symptom_detail["index"], symptom_array)
         interpreter.invoke()
         output_data = interpreter.get_tensor(output_details[0]["index"])
 
@@ -186,7 +249,7 @@ def _get_last_conv_layer(model: tf.keras.Model):
     raise ValueError("No 4D convolutional layer found for Grad-CAM")
 
 
-def _compute_gradcam(image_array: np.ndarray, class_index: int) -> np.ndarray:
+def _compute_gradcam(image_array: np.ndarray, class_index: int, symptoms_array: Optional[np.ndarray]) -> np.ndarray:
     if keras_model is None:
         raise ValueError("Keras model not available for Grad-CAM")
 
@@ -197,7 +260,10 @@ def _compute_gradcam(image_array: np.ndarray, class_index: int) -> np.ndarray:
     )
 
     with tf.GradientTape() as tape:
-        conv_outputs, predictions = grad_model(image_array)
+        if len(keras_model.inputs) > 1:
+            conv_outputs, predictions = grad_model([image_array, symptoms_array])
+        else:
+            conv_outputs, predictions = grad_model(image_array)
         if predictions.shape[-1] <= class_index:
             raise ValueError("Class index out of range for Grad-CAM")
         class_channel = predictions[:, class_index]
@@ -251,7 +317,10 @@ def _decode_image(image_base64: str) -> tuple[np.ndarray, bytes, np.ndarray]:
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     except Exception as exc:
         raise ValueError("Invalid image data") from exc
-    input_shape = input_details[0]["shape"]
+    image_detail = _get_image_input_detail()
+    if image_detail is None:
+        raise ValueError("Model input details unavailable")
+    input_shape = image_detail["shape"]
     if len(input_shape) != 4:
         raise ValueError("Model input must be 4D (batch, height, width, channels)")
     height, width = int(input_shape[1]), int(input_shape[2])
@@ -293,7 +362,7 @@ async def predict(input_data: PredictionInput):
         if cached is not None:
             return cached
 
-        result = _run_inference(features)
+        result = _run_inference(features, input_data.symptoms)
         PREDICTION_CACHE.set(cache_key, result)
         return result
         
@@ -321,7 +390,7 @@ async def predict_explain(input_data: PredictionInput):
         if cached is not None:
             return cached
 
-        prediction_output = _run_inference(features)
+        prediction_output = _run_inference(features, input_data.symptoms)
         top_class = 0
         if isinstance(prediction_output.prediction, list):
             top_class = int(np.argmax(np.array(prediction_output.prediction)))
@@ -330,7 +399,9 @@ async def predict_explain(input_data: PredictionInput):
         heatmap_values = None
         if keras_model is not None:
             try:
-                heatmap_values = _compute_gradcam(features, top_class)
+                symptom_len = _get_symptom_length()
+                symptom_array = _prepare_symptoms(input_data.symptoms, symptom_len)
+                heatmap_values = _compute_gradcam(features, top_class, symptom_array)
                 heatmap_method = "grad-cam"
             except Exception as exc:
                 logger.exception("Grad-CAM failed, falling back to intensity heatmap: %s", exc)
@@ -368,12 +439,17 @@ async def model_info():
     if interpreter is None:
         raise HTTPException(status_code=500, detail="Model not loaded")
     
+    input_shapes = [detail["shape"].tolist() for detail in input_details] if input_details else None
+    input_dtypes = [str(detail["dtype"]) for detail in input_details] if input_details else None
+
     return {
         "model_path": MODEL_PATH,
         "keras_model_path": KERAS_MODEL_PATH,
         "keras_model_loaded": keras_model is not None,
         "input_shape": input_details[0]['shape'].tolist() if input_details else None,
         "input_dtype": str(input_details[0]['dtype']) if input_details else None,
+        "input_shapes": input_shapes,
+        "input_dtypes": input_dtypes,
         "output_shape": output_details[0]['shape'].tolist() if output_details else None,
         "output_dtype": str(output_details[0]['dtype']) if output_details else None,
     }
