@@ -2,23 +2,47 @@
 
 Get up and running with Cattle Disease AI in minutes!
 
+## ⚠️ Before You Start
+
+**Flutter must be installed first!** If you don't have Flutter installed, follow these steps:
+
+1. **Install Flutter SDK**: Visit https://flutter.dev/docs/get-started/install
+2. **Verify installation**: Run `flutter doctor` to check your setup
+3. **Fix any issues**: Follow the prompts from `flutter doctor`
+
+If `flutter` command is not found, Flutter is not installed or not in your PATH.
+
 ## Prerequisites
 
-- Flutter SDK 3.0.0+
-- Android Studio or Xcode
+✅ **Required:**
+- Flutter SDK 3.0.0+ (install from https://flutter.dev)
 - Git
+
+✅ **For building:**
+- Android Studio (for Android builds)
+- Xcode (for iOS builds, macOS only)
 
 ## Installation (5 minutes)
 
+**Step 1: Verify Flutter is installed**
 ```bash
-# 1. Clone repository
+flutter --version
+# Should display Flutter version, not "command not found"
+```
+
+**Step 2: Clone repository**
+```bash
 git clone https://github.com/nmaketh/Cattle_disease-ai.git
 cd Cattle_disease-ai
+```
 
-# 2. Install dependencies
+**Step 3: Install dependencies**
+```bash
 flutter pub get
+```
 
-# 3. Run the app
+**Step 4: Run the app**
+```bash
 flutter run
 ```
 
@@ -141,6 +165,12 @@ flutter clean && flutter pub get
 7. 🚀 Deploy to users
 
 ## Troubleshooting
+
+**"flutter: command not found"**
+- Flutter is not installed or not in your PATH
+- Install Flutter: https://flutter.dev/docs/get-started/install
+- After installation, restart your terminal
+- Verify with: `flutter --version`
 
 **App won't build?**
 ```bash

@@ -188,6 +188,14 @@ The current implementation uses a sample ML service. To integrate a real model:
 
 ## Troubleshooting
 
+### Issue: "flutter: command not found"
+**Solution:** 
+Flutter is not installed or not in your PATH.
+1. Install Flutter from https://flutter.dev/docs/get-started/install
+2. Add Flutter to your PATH (see installation guide)
+3. Restart your terminal/command prompt
+4. Verify with: `flutter --version`
+
 ### Issue: "Flutter SDK not found"
 **Solution:** Ensure Flutter is in your PATH and run `flutter doctor`
 

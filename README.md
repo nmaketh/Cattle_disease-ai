@@ -47,25 +47,41 @@ lib/
 
 ### Prerequisites
 
+**⚠️ Flutter must be installed before proceeding!**
+
+If you get `flutter: command not found`, install Flutter first:
+- **Install Flutter**: https://flutter.dev/docs/get-started/install
+- **Verify**: Run `flutter doctor` to check your setup
+
+**Required:**
 - Flutter SDK (3.0.0 or higher)
 - Dart SDK (included with Flutter)
-- Android Studio / Xcode for mobile development
-- A physical device or emulator
+- Git
+
+**For building APKs/IPAs:**
+- Android Studio (for Android)
+- Xcode (for iOS, macOS only)
 
 ### Installation
 
-1. **Clone the repository:**
+1. **Verify Flutter installation:**
+   ```bash
+   flutter --version
+   # Should display version info, not "command not found"
+   ```
+
+2. **Clone the repository:**
    ```bash
    git clone https://github.com/nmaketh/Cattle_disease-ai.git
    cd Cattle_disease-ai
    ```
 
-2. **Install dependencies:**
+3. **Install dependencies:**
    ```bash
    flutter pub get
    ```
 
-3. **Run the app:**
+4. **Run the app:**
    ```bash
    flutter run
    ```
