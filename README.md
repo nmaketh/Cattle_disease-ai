@@ -36,6 +36,7 @@ Hybrid online-offline explainable ML system for early detection of priority catt
 - Note: The UI sends optional symptom inputs to the API. If no symptoms are selected, a zero vector is sent.
 
 ## Designs (Mockups / Screens)
+- Figma design file: https://www.figma.com/make/Pe0LgxsTbWJlefBGjsJrFb/Community-Animal-Health-App?t=yQnNg7tERaAAOYJj-1
 - Streamlit UI screenshot: [designs/screenshots/streamlit.png](designs/screenshots/streamlit.png)
 - Swagger UI screenshot: [designs/screenshots/swagger%20UI.png](designs/screenshots/swagger%20UI.png)
 - /predict response screenshot: [designs/screenshots/prediction-response.png](designs/screenshots/prediction-response.png)
