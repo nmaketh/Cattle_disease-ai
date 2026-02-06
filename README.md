@@ -21,12 +21,12 @@ Hybrid online-offline explainable ML system for early detection of priority catt
 	- Optional: set `API_BASE_URL` to point at the API (default: https://cattle-disease-ai.onrender.com)
 
 ## Designs (Mockups / Screens)
-- Streamlit UI mockup: designs/screenshots/streamlit-ui.png
+- Streamlit UI mockup: designs/screenshots/streamlit.png
 - Streamlit UI run: `streamlit run streamlit_app.py`
 - UI mockup URL: TBD
-- Swagger UI screenshot: designs/screenshots/swagger-ui.png
+- Swagger UI screenshot: designs/screenshots/swagger%20UI.png
 - /predict response screenshot (optional): designs/screenshots/predict-response.png
-- Grad-CAM sample heatmap: designs/screenshots/grad-cam-heatmap.png
+- Grad-CAM sample heatmap: designs/screenshots/grad-Cam.png
 
 Note: The Streamlit UI includes symptom inputs as a mockup; the current API endpoint uses image-only input.
 

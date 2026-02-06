@@ -1,7 +1,7 @@
 # Screenshots
 
 Place UI evidence screenshots here and update the notebook and README links:
-- streamlit-ui.png
-- swagger-ui.png
+- streamlit.png
 - predict-response.png (optional)
-- grad-cam-heatmap.png
+- grad-Cam.png
+- swagger UI.png
