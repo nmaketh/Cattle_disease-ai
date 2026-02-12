@@ -13,7 +13,7 @@ TFLITE_PATH = "Cattle disease diagnose"    # optional
 IMG_SIZE = (224, 224)
 
 # IMPORTANT: Must match your model output index order
-CLASS_NAMES = ["FMD", "LSD", "Normal"]  # <-- update if your model outputs different order
+CLASS_NAMES = ["Normal", "LSD", "FMD"]  #
 
 # Optional: provide labels for symptoms. If length != model symptom dim, app will auto-generate labels.
 SYMPTOM_LABELS = [
