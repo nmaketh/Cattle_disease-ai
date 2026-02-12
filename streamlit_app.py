@@ -1,235 +1,373 @@
-import base64
-import io
 import os
-
-import requests
+import numpy as np
 import streamlit as st
+import tensorflow as tf
 from PIL import Image
 
+# ----------------------------
+# CONFIG (EDIT THESE)
+# ----------------------------
+MODEL_PATH = "ml/model/best_fusion_model.keras"      #
+TFLITE_PATH = "Cattle disease diagnose"    # optional
 
-def _encode_image(image: Image.Image) -> str:
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode("ascii")
+IMG_SIZE = (224, 224)
+
+# IMPORTANT: Must match your model output index order
+CLASS_NAMES = ["FMD", "LSD", "Normal"]  # <-- update if your model outputs different order
+
+# Optional: provide labels for symptoms. If length != model symptom dim, app will auto-generate labels.
+SYMPTOM_LABELS = [
+    # Example (you can change to your real 8 symptom names)
+    "Fever",
+    "Excessive Salivation",
+    "Mouth Lesions",
+    "Foot Lesions",
+    "Lameness",
+    "Skin Nodules",
+    "Nasal Discharge",
+    "Loss of Appetite",
+]
+
+DEFAULT_USE_TFLITE = False
 
 
-def _api_url(base_url: str, path: str) -> str:
-    return f"{base_url.rstrip('/')}{path}"
+# ----------------------------
+# PAGE + STYLE
+# ----------------------------
+st.set_page_config(page_title="Cattle Disease AI", page_icon="🐄", layout="wide")
+
+CUSTOM_CSS = """
+<style>
+.block-container { padding-top: 1.2rem; padding-bottom: 2.5rem; }
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
+.card {
+  border: 1px solid rgba(49, 51, 63, 0.15);
+  border-radius: 18px;
+  padding: 18px 18px;
+  background: rgba(255,255,255,0.70);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.05);
+}
+.card h3 { margin: 0 0 10px 0; }
+.muted { color: rgba(49,51,63,0.65); font-size: 0.92rem; }
+
+.badge {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  border: 1px solid rgba(49, 51, 63, 0.15);
+  background: rgba(240, 242, 246, 0.9);
+}
+
+.hr {
+  height: 1px;
+  background: rgba(49, 51, 63, 0.12);
+  margin: 10px 0 16px 0;
+}
+
+.stButton>button {
+  border-radius: 12px;
+  padding: 0.65rem 1rem;
+}
+</style>
+"""
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
-st.set_page_config(page_title="Cattle Disease AI", layout="wide")
+# ----------------------------
+# LOADERS
+# ----------------------------
+@st.cache_resource
+def load_keras_model(path: str):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Keras model not found: {path}")
+    return tf.keras.models.load_model(path)
 
-st.markdown(
+@st.cache_resource
+def load_tflite_interpreter(path: str):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"TFLite model not found: {path}")
+    interpreter = tf.lite.Interpreter(model_path=path)
+    interpreter.allocate_tensors()
+    return interpreter
+
+@st.cache_resource
+def get_model_io_info():
     """
-    <style>
-    .main-title {
-        font-size: 2rem;
-        font-weight: 800;
-        color: #0f172a;
-        margin-bottom: 0.25rem;
+    Detect symptom input dimension from the model to avoid (1,10) vs (None,8) errors.
+    We assume:
+      - One input is image: (None,224,224,3)
+      - One input is symptoms: (None,N)
+    """
+    model = load_keras_model(MODEL_PATH)
+    image_shape = None
+    symptom_dim = None
+
+    for inp in model.inputs:
+        shape = tuple(inp.shape)
+        if len(shape) == 4 and shape[1] == 224 and shape[2] == 224 and shape[3] == 3:
+            image_shape = shape
+        if len(shape) == 2:
+            symptom_dim = int(shape[-1])
+
+    if symptom_dim is None:
+        raise RuntimeError("Could not detect symptom input dimension. Model may not be multimodal.")
+    if image_shape is None:
+        # still allow; image shape might be dynamic, but we expect 224
+        image_shape = ("Unknown",)
+
+    return {
+        "symptom_dim": symptom_dim,
+        "image_input_shape": image_shape,
+        "output_dim": int(model.outputs[0].shape[-1]),
     }
-    .subtitle {
-        color: #475569;
-        font-size: 1rem;
-        margin-bottom: 1rem;
-    }
-    .section {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 1rem 1.25rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
-    }
-    .label {
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: #64748b;
-        font-weight: 700;
-    }
-    .value {
-        font-size: 1.6rem;
-        font-weight: 800;
-        color: #0f172a;
-        margin: 0.25rem 0 0.5rem 0;
-    }
-    .note {
-        color: #334155;
-        font-weight: 600;
-    }
-    .status-good {
-        background: #dcfce7;
-        color: #166534;
-        padding: 0.5rem 0.75rem;
-        border-radius: 10px;
-        font-weight: 700;
-        margin: 0.5rem 0;
-    }
-    .status-warn {
-        background: #fef3c7;
-        color: #92400e;
-        padding: 0.5rem 0.75rem;
-        border-radius: 10px;
-        font-weight: 700;
-        margin: 0.5rem 0;
-    }
-    .pill {
-        display: inline-block;
-        padding: 0.3rem 0.6rem;
-        border-radius: 999px;
-        background: #e2e8f0;
-        color: #0f172a;
-        font-weight: 700;
-        font-size: 0.85rem;
-        margin: 0.25rem 0.25rem 0 0;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
-st.markdown('<div class="main-title">Cattle Disease AI</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="subtitle">Simple, readable UI for field diagnosis.</div>',
-    unsafe_allow_html=True,
-)
 
-api_base_url = st.sidebar.text_input(
-    "API Base URL",
-    value=os.getenv("API_BASE_URL", "https://cattle-disease-ai.onrender.com"),
-)
-include_explain = st.sidebar.checkbox("Include Grad-CAM heatmap", value=True)
+# ----------------------------
+# PREPROCESS + INFERENCE
+# ----------------------------
+def preprocess_image(pil_img: Image.Image) -> np.ndarray:
+    img = pil_img.convert("RGB").resize(IMG_SIZE)
+    arr = np.array(img, dtype=np.float32)
+    arr = np.expand_dims(arr, axis=0)  # (1,224,224,3)
+    arr = tf.keras.applications.mobilenet_v2.preprocess_input(arr)
+    return arr
 
-if st.sidebar.button("Check API health"):
-    try:
-        health = requests.get(_api_url(api_base_url, "/health"), timeout=20)
-        if health.ok:
-            st.sidebar.success("API is healthy")
-        else:
-            st.sidebar.error(f"API error {health.status_code}")
-    except requests.RequestException as exc:
-        st.sidebar.error(f"API check failed: {exc}")
+def build_symptom_vector(symptom_values: list[float]) -> np.ndarray:
+    vec = np.array(symptom_values, dtype=np.float32)
+    return np.expand_dims(vec, axis=0)  # (1,N)
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("Symptom Inputs")
+def predict_keras(model, img_arr: np.ndarray, sym_vec: np.ndarray) -> np.ndarray:
+    return model.predict([img_arr, sym_vec], verbose=0)[0]
 
-sym_nodules = st.sidebar.checkbox("Skin Nodules (LSD)", value=False)
-sym_mouth = st.sidebar.checkbox("Mouth/Hoof Sores (FMD)", value=False)
-sym_cough = st.sidebar.checkbox("Coughing (CBPP)", value=False)
-sym_swollen = st.sidebar.checkbox("Swollen Neck/Fever (ECF)", value=False)
+def predict_tflite(interpreter, img_arr: np.ndarray, sym_vec: np.ndarray) -> np.ndarray:
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
 
-if st.sidebar.button("Clear results"):
-    st.session_state["last_response"] = None
-    st.session_state["last_image"] = None
+    def is_image(shape):
+        return len(shape) == 4 and shape[1] == 224 and shape[2] == 224 and shape[3] == 3
 
-if "last_response" not in st.session_state:
-    st.session_state["last_response"] = None
-if "last_image" not in st.session_state:
-    st.session_state["last_image"] = None
+    img_idx, sym_idx = None, None
+    for d in input_details:
+        shape = d["shape"]
+        if is_image(shape):
+            img_idx = d["index"]
+        elif len(shape) == 2:
+            sym_idx = d["index"]
 
-left, right = st.columns([1.2, 1])
+    if img_idx is None or sym_idx is None:
+        raise RuntimeError(f"Could not map TFLite inputs. Shapes: {[d['shape'] for d in input_details]}")
 
-with left:
-    st.markdown('<div class="section">', unsafe_allow_html=True)
-    st.markdown("### Upload and Diagnose")
-    st.markdown("Upload a clear side-profile image of the cattle.")
-    uploaded_file = st.file_uploader("Upload image", type=["jpg", "jpeg", "png"])
+    img_dtype = next(d["dtype"] for d in input_details if d["index"] == img_idx)
+    sym_dtype = next(d["dtype"] for d in input_details if d["index"] == sym_idx)
 
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, caption="Captured image", use_column_width=True)
-    else:
-        image = None
+    interpreter.set_tensor(img_idx, img_arr.astype(img_dtype))
+    interpreter.set_tensor(sym_idx, sym_vec.astype(sym_dtype))
+    interpreter.invoke()
 
-    if st.button("Run Diagnosis", use_container_width=True, type="primary"):
-        if image is None:
-            st.warning("Please upload a cattle image first.")
-        else:
-            if not api_base_url.strip():
-                st.error("Please provide a valid API base URL in the sidebar.")
-                st.markdown('</div>', unsafe_allow_html=True)
-                st.stop()
-            symptoms = [
-                int(sym_swollen),
-                int(sym_nodules),
-                int(sym_mouth),
-                0,
-                int(sym_cough),
-                int(sym_swollen),
-            ]
-            payload = {
-                "image_base64": _encode_image(image),
-                "symptoms": symptoms,
-            }
-            endpoint = "/predict-explain" if include_explain else "/predict"
-            try:
-                with st.spinner("Calling the API..."):
-                    response = requests.post(
-                        _api_url(api_base_url, endpoint),
-                        json=payload,
-                        timeout=60,
-                    )
-                if not response.ok:
-                    st.error(f"API error {response.status_code}: {response.text}")
-                else:
-                    st.session_state["last_response"] = response.json()
-                    st.session_state["last_image"] = image
-                    st.markdown(
-                        '<div class="status-good">Diagnosis complete. See results on the right.</div>',
-                        unsafe_allow_html=True,
-                    )
-            except requests.RequestException as exc:
-                st.error(f"Request failed: {exc}")
-    st.markdown('</div>', unsafe_allow_html=True)
+    out = interpreter.get_tensor(output_details[0]["index"])[0]
+    return out
 
-with right:
-    st.markdown('<div class="section">', unsafe_allow_html=True)
-    st.markdown("### Results")
-    response = st.session_state.get("last_response")
-    image = st.session_state.get("last_image")
+def sorted_probs(probs: np.ndarray):
+    rows = [{"Class": c, "Probability": float(p)} for c, p in zip(CLASS_NAMES, probs)]
+    rows.sort(key=lambda x: x["Probability"], reverse=True)
+    return rows
 
-    if response is None or image is None:
+
+# ----------------------------
+# SIDEBAR
+# ----------------------------
+with st.sidebar:
+    st.markdown("## 🧠 Cattle Disease AI")
+    st.caption("Multimodal Fusion Demo (Image + Symptoms)")
+    st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
+
+    page = st.radio("Navigation", ["Predict", "Model Info", "Deployment Notes"], index=0)
+
+    st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
+    st.markdown("### ⚙️ Settings")
+    use_tflite = st.toggle("Use TFLite inference", value=DEFAULT_USE_TFLITE)
+    st.caption("Use Keras for server/API; TFLite for mobile/edge.")
+
+    st.markdown('<div class="hr"></div>', unsafe_allow_html=True)
+    st.markdown("### 📦 Paths")
+    st.code(MODEL_PATH, language="text")
+    st.code(TFLITE_PATH, language="text")
+
+
+# ----------------------------
+# HEADER
+# ----------------------------
+io = None
+try:
+    io = get_model_io_info()
+except Exception as e:
+    st.error(f"Model load failed: {e}")
+    st.stop()
+
+sym_dim = io["symptom_dim"]
+out_dim = io["output_dim"]
+
+# Validate CLASS_NAMES length
+if len(CLASS_NAMES) != out_dim:
+    st.error(f"CLASS_NAMES has {len(CLASS_NAMES)} items but model outputs {out_dim} classes. Fix CLASS_NAMES.")
+    st.stop()
+
+# Create symptom labels to match exact model dim
+if len(SYMPTOM_LABELS) != sym_dim:
+    SYMPTOM_LABELS = [f"Symptom {i+1}" for i in range(sym_dim)]
+
+colA, colB = st.columns([0.7, 0.3], vertical_alignment="center")
+with colA:
+    st.markdown("# 🐄 Cattle Disease Predictor")
+    st.markdown(
+        "<span class='muted'>Upload a cattle image and select symptoms to predict "
+        "<b>Normal</b>, <b>LSD</b>, or <b>FMD</b>.</span>",
+        unsafe_allow_html=True,
+    )
+with colB:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("**Status**  \n<span class='badge'>Demo-ready</span>", unsafe_allow_html=True)
+    st.markdown("<div class='hr'></div>", unsafe_allow_html=True)
+    st.markdown(
+        f"**Inputs**: Image + {sym_dim} Symptoms  \n"
+        f"**Output classes**: {out_dim}  \n"
+        f"**Model**: MobileNetV2 + MLP Fusion",
+        unsafe_allow_html=True,
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("")
+
+
+# ----------------------------
+# PAGES
+# ----------------------------
+if page == "Predict":
+    left, right = st.columns([0.55, 0.45], gap="large")
+
+    with left:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown("### 1) Upload Image")
+        st.markdown('<span class="muted">Supported: JPG/PNG</span>', unsafe_allow_html=True)
+        uploaded = st.file_uploader(" ", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("")
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown("### 2) Select Symptoms")
         st.markdown(
-            '<div class="status-warn">Run a diagnosis to see results.</div>',
+            "<span class='muted'>Checkboxes generate the symptom vector in the exact shape your model expects.</span>",
             unsafe_allow_html=True,
         )
-    else:
-        label = response.get("class_label") or "Unknown"
-        st.markdown('<div class="label">Probable Disease</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="value">{label}</div>', unsafe_allow_html=True)
+        st.markdown("<div class='hr'></div>", unsafe_allow_html=True)
 
-        confidence = response.get("confidence")
-        if isinstance(confidence, (int, float)):
-            st.progress(min(max(float(confidence), 0.0), 1.0))
-            st.caption(f"Confidence Score: {float(confidence):.2f}")
+        symptom_values = []
+        cols = st.columns(2)
+        for i, name in enumerate(SYMPTOM_LABELS):
+            with cols[i % 2]:
+                checked = st.checkbox(name, value=False, key=f"sym_{i}")
+                symptom_values.append(1.0 if checked else 0.0)
 
-        st.image(image, caption="Captured image", use_column_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        explain = response.get("explainability")
-        if explain and explain.get("heatmap_png_base64"):
-            heatmap_bytes = base64.b64decode(explain["heatmap_png_base64"])
-            heatmap_img = Image.open(io.BytesIO(heatmap_bytes))
-            st.image(heatmap_img, caption="Grad-CAM heatmap", use_column_width=True)
+        st.markdown("")
+        predict = st.button("🔎 Predict", type="primary", use_container_width=True, disabled=(uploaded is None))
 
-        st.markdown("#### Reported Symptoms")
-        symptom_labels = []
-        if sym_nodules:
-            symptom_labels.append("Skin nodules")
-        if sym_mouth:
-            symptom_labels.append("Mouth/hoof sores")
-        if sym_cough:
-            symptom_labels.append("Coughing")
-        if sym_swollen:
-            symptom_labels.append("Swollen neck/fever")
-        if symptom_labels:
-            for label_text in symptom_labels:
-                st.markdown(f'<span class="pill">{label_text}</span>', unsafe_allow_html=True)
+    with right:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown("### Results")
+        st.markdown('<span class="muted">Prediction + probability distribution.</span>', unsafe_allow_html=True)
+        st.markdown("<div class='hr'></div>", unsafe_allow_html=True)
+
+        if uploaded is None:
+            st.info("Upload an image on the left, then click **Predict**.")
+            st.markdown("</div>", unsafe_allow_html=True)
         else:
-            st.markdown('<span class="pill">No symptoms selected</span>', unsafe_allow_html=True)
+            pil_img = Image.open(uploaded)
+            st.image(pil_img, caption="Uploaded image", use_column_width=True)
 
-        st.markdown("---")
-        st.button("Save Case Offline", use_container_width=True)
-        st.button("Sync to Vet", use_container_width=True)
+            if predict:
+                try:
+                    img_arr = preprocess_image(pil_img)
+                    sym_vec = build_symptom_vector(symptom_values)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+                    if use_tflite:
+                        interpreter = load_tflite_interpreter(TFLITE_PATH)
+                        probs = predict_tflite(interpreter, img_arr, sym_vec)
+                        model_type = "TFLite"
+                    else:
+                        model = load_keras_model(MODEL_PATH)
+                        probs = predict_keras(model, img_arr, sym_vec)
+                        model_type = "Keras"
+
+                    probs = np.array(probs, dtype=np.float32)
+                    pred_idx = int(np.argmax(probs))
+                    pred_label = CLASS_NAMES[pred_idx]
+                    conf = float(probs[pred_idx])
+
+                    # Metrics row
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Prediction", pred_label)
+                    m2.metric("Confidence", f"{conf:.2%}")
+                    m3.metric("Inference", model_type)
+
+                    st.markdown("<div class='hr'></div>", unsafe_allow_html=True)
+
+                    st.markdown("#### Probability Distribution")
+                    for row in sorted_probs(probs):
+                        st.write(f"**{row['Class']}** — {row['Probability']:.3f}")
+                        st.progress(min(max(row["Probability"], 0.0), 1.0))
+
+                    with st.expander("Show exact probabilities"):
+                        st.table(sorted_probs(probs))
+
+                    with st.expander("Show symptom vector used"):
+                        st.write({"symptom_dim": sym_dim, "vector": symptom_values})
+
+                except Exception as e:
+                    st.error(f"Prediction failed: {e}")
+
+                st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                st.warning("Click **Predict** to run inference.")
+                st.markdown("</div>", unsafe_allow_html=True)
+
+
+elif page == "Model Info":
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### Model I/O Information")
+    st.write("Detected from your saved model file:")
+    st.json(io)
+    st.markdown("<div class='hr'></div>", unsafe_allow_html=True)
+
+    st.markdown("### Notes")
+    st.write(
+        "- If you want real symptom names, update `SYMPTOM_LABELS` to match your training feature order.\n"
+        "- If you trained with 8 symptoms, the UI will automatically use 8 inputs and avoid shape mismatch."
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+elif page == "Deployment Notes":
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### Deployment plan (MVP-ready)")
+    st.write(
+        "**Option A: FastAPI + Swagger UI (Supervisor-friendly)**\n"
+        "- Load `fusion_model.keras`\n"
+        "- Endpoint `/predict` accepts: image + symptom vector\n"
+        "- Test using Swagger UI / Postman\n\n"
+        "**Option B: Mobile/Edge**\n"
+        "- Use `fusion_model.tflite`\n"
+        "- Keep MobileNetV2 preprocessing identical to training"
+    )
+    st.markdown("<div class='hr'></div>", unsafe_allow_html=True)
+    st.markdown("### Important alignment checks")
+    st.write(
+        "- `CLASS_NAMES` must match your model output order.\n"
+        "- Symptoms must be in the same order as training. This app matches dimension automatically."
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
