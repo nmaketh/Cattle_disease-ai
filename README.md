@@ -73,7 +73,7 @@ The solution includes:
 
 
 ## Designs (Mockups / Screens)
-- Figma design file: https://www.figma.com/make/Pe0LgxsTbWJlefBGjsJrFb/Community-Animal-Health-App?t=yQnNg7tERaAAOYJj-1
+- Figma design file: https://utter-offset-88332261.figma.site/
 - Streamlit UI screenshot: `designs/screenshots/streamlit.png`
 - Swagger UI screenshot: `designs/screenshots/swagger UI.png`
 - /predict response screenshot: `designs/screenshots/prediction-response.png`
