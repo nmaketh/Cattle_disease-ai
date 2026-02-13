@@ -29,13 +29,7 @@ CACHE_MAX_ITEMS = int(os.getenv("CACHE_MAX_ITEMS", "256"))
 HEATMAP_HEIGHT = int(os.getenv("HEATMAP_HEIGHT", "32"))
 HEATMAP_SCALE_X = int(os.getenv("HEATMAP_SCALE_X", "16"))
 HEATMAP_SCALE_Y = int(os.getenv("HEATMAP_SCALE_Y", "4"))
-CLASS_NAMES = [
-    "CBPP",
-    "ECF",
-    "FOOT-AND-MOUTH",
-    "HEALTHY",
-    "LSD"
-]
+CLASS_NAMES = ["Normal", "LSD", "FMD"]
 
 # Enable CORS for all origins
 app.add_middleware(
@@ -47,10 +41,10 @@ app.add_middleware(
 )
 
 # Load the TFLite model
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "ml", "model", "cattle_health_mvp.tflite")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "ml", "model", "best_fusion_model.tflite")
 KERAS_MODEL_PATH = os.getenv(
     "KERAS_MODEL_PATH",
-    os.path.join(os.path.dirname(__file__), "ml", "model", "cattle_health_mvp.h5")
+    os.path.join(os.path.dirname(__file__), "ml", "model", "best_fusion_model.keras")
 )
 
 try:
