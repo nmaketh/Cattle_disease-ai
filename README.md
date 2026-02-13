@@ -16,7 +16,6 @@ The solution includes:
 ## Repository
 - https://github.com/nmaketh/Cattle_disease-ai
 
----
 
 ## MVP Scope vs Roadmap
 ### MVP (this submission)
@@ -29,7 +28,6 @@ The solution includes:
 -  Extend to additional diseases such as **ECF** and **CBPP** once reliable labeled datasets are available.
   These diseases are often **symptom-dominant** and require structured clinical data collection during pilot testing.
 
----
 
 ## Quickstart (Local)
 1. Create and activate a virtual environment:
@@ -49,7 +47,6 @@ The solution includes:
    - `python -m streamlit run streamlit_app.py`
    - Optional: set `API_BASE_URL` to point at the API (default: https://cattle-disease-ai.onrender.com)
 
----
 
 ## Key Files
 - Model notebook: `ml/Nhial_Majok_ML_Track_Final.ipynb`
@@ -57,7 +54,7 @@ The solution includes:
 - Streamlit UI: `streamlit_app.py`
 - Tests: `test_api.py`
 
----
+
 
 ## API
 - Base URL (local): http://localhost:8000
@@ -69,13 +66,11 @@ The solution includes:
 - `GET /model-info`
 - `GET /health`
 
----
 
 ## Streamlit UI
 - App URL: https://cattledisease-ai-drzbcmhavbpzqiz2bnvjkt.streamlit.app/
 - The UI sends optional symptom inputs to the API. If no symptoms are selected, a zero vector is sent.
 
----
 
 ## Designs (Mockups / Screens)
 - Figma design file: https://www.figma.com/make/Pe0LgxsTbWJlefBGjsJrFb/Community-Animal-Health-App?t=yQnNg7tERaAAOYJj-1
@@ -83,7 +78,6 @@ The solution includes:
 - Swagger UI screenshot: `designs/screenshots/swagger UI.png`
 - /predict response screenshot: `designs/screenshots/prediction-response.png`
 
----
 
 ## Deployment
 ### API (Render)
@@ -95,12 +89,10 @@ The solution includes:
 - Platform: Streamlit Community Cloud
 - Entry: `streamlit_app.py`
 
----
 
 ## Video Demo
 - Demo video: https://drive.google.com/file/d/1EunB42bvMj6tvBSwFUt71Rs8pjR9bFKj/view?usp=sharing
 
----
 
 ## Submission Checklist
 -  README with description, setup, and deployment plan
